@@ -6,7 +6,7 @@ from pytube import YouTube
 import instaloader
 import requests
 
-# Bot Token from @BotFather
+# Bot Token from @BotFathe
 BOT_TOKEN = "7704220520:AAEI_ouYgKUdt52-ec9JJDjdo44pme781Ls"
 
 # Enable logging
