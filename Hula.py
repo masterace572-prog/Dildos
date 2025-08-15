@@ -1,76 +1,196 @@
 import os
-import logging
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from pytube import YouTube
-import instaloader
-import requests
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, CallbackContext
+import pyfiglet
+from io import StringIO
+import sys
 
-# Bot Token from @BotFathe
-BOT_TOKEN = "7704220520:AAEI_ouYgKUdt52-ec9JJDjdo44pme781Ls"
+# Store user data temporarily
+user_data = {}
 
-# Enable logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-logger = logging.getLogger(__name__)
+def start(update: Update, context: CallbackContext) -> None:
+    """Send a message when the command /start is issued."""
+    banner = pyfiglet.figlet_format("Patch Processor")
+    welcome_message = f"```\n{banner}\n```Welcome to Patch Processor Bot!\n\nSend /process to start creating patch commands."
+    
+    update.message.reply_text(welcome_message, parse_mode='Markdown')
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('🔗 Send me an Instagram or YouTube link to download the video!')
+def process_command(update: Update, context: CallbackContext) -> None:
+    """Start the patch processing conversation."""
+    chat_id = update.effective_chat.id
+    user_data[chat_id] = {}
+    
+    update.message.reply_text("Please send me your input file (text file with memory addresses):")
+    return "WAITING_INPUT_FILE"
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message_text = update.message.text
-    chat_id = update.message.chat_id
+def handle_input_file(update: Update, context: CallbackContext) -> None:
+    """Handle the input file sent by the user."""
+    chat_id = update.effective_chat.id
+    
+    if not update.message.document:
+        update.message.reply_text("Please send a text file as a document.")
+        return "WAITING_INPUT_FILE"
+    
+    # Store file info temporarily
+    file = update.message.document.get_file()
+    user_data[chat_id]['input_file'] = file
+    
+    # Ask for output file name
+    update.message.reply_text("Great! Now please enter the name for the output file (e.g., output.txt):")
+    return "WAITING_OUTPUT_NAME"
 
-    if "instagram.com" in message_text:
-        await download_instagram_video(update, message_text)
-    elif "youtube.com" in message_text or "youtu.be" in message_text:
-        await download_youtube_video(update, message_text)
+def handle_output_name(update: Update, context: CallbackContext) -> None:
+    """Handle the output file name entered by the user."""
+    chat_id = update.effective_chat.id
+    output_name = update.message.text.strip()
+    
+    if not output_name.endswith('.txt'):
+        output_name += '.txt'
+    
+    user_data[chat_id]['output_file'] = output_name
+    
+    # Ask to select library
+    keyboard = [
+        [InlineKeyboardButton("libanogs.so", callback_data='libanogs.so')],
+        [InlineKeyboardButton("libUE4.so", callback_data='libUE4.so')],
+        [InlineKeyboardButton("Custom library", callback_data='custom_lib')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    update.message.reply_text('Select the library name:', reply_markup=reply_markup)
+    return "SELECTING_LIBRARY"
+
+def select_library(update: Update, context: CallbackContext) -> None:
+    """Handle library selection."""
+    query = update.callback_query
+    chat_id = query.message.chat_id
+    
+    query.answer()
+    
+    if query.data == 'custom_lib':
+        query.edit_message_text("Please enter your custom library name (e.g., libcustom.so):")
+        return "WAITING_CUSTOM_LIB"
     else:
-        await update.message.reply_text("❌ Invalid link! Send a valid Instagram or YouTube URL.")
+        user_data[chat_id]['lib_name'] = query.data
+        # Proceed to patch sequence selection
+        return select_patch_sequence_menu(query.message)
 
-async def download_instagram_video(update: Update, url: str):
+def handle_custom_lib(update: Update, context: CallbackContext) -> None:
+    """Handle custom library name input."""
+    chat_id = update.effective_chat.id
+    lib_name = update.message.text.strip()
+    
+    if not lib_name.endswith('.so'):
+        lib_name += '.so'
+    
+    user_data[chat_id]['lib_name'] = lib_name
+    return select_patch_sequence_menu(update.message)
+
+def select_patch_sequence_menu(message) -> str:
+    """Show patch sequence selection menu."""
+    keyboard = [
+        [InlineKeyboardButton("C0 03 5F D6", callback_data='C0 03 5F D6')],
+        [InlineKeyboardButton("00 00 80 D2 C0 03 5F D6", callback_data='00 00 80 D2 C0 03 5F D6')],
+        [InlineKeyboardButton("Custom sequence", callback_data='custom_seq')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    message.reply_text('Select the patch sequence:', reply_markup=reply_markup)
+    return "SELECTING_PATCH_SEQUENCE"
+
+def select_patch_sequence(update: Update, context: CallbackContext) -> None:
+    """Handle patch sequence selection."""
+    query = update.callback_query
+    chat_id = query.message.chat_id
+    
+    query.answer()
+    
+    if query.data == 'custom_seq':
+        query.edit_message_text("Please enter your custom patch sequence:")
+        return "WAITING_CUSTOM_SEQ"
+    else:
+        user_data[chat_id]['patch_sequence'] = query.data
+        # Proceed to process the file
+        return process_file_final(query.message, chat_id)
+
+def handle_custom_seq(update: Update, context: CallbackContext) -> None:
+    """Handle custom patch sequence input."""
+    chat_id = update.effective_chat.id
+    patch_sequence = update.message.text.strip()
+    
+    user_data[chat_id]['patch_sequence'] = patch_sequence
+    return process_file_final(update.message, chat_id)
+
+def process_file_final(message, chat_id) -> None:
+    """Process the file with the selected parameters."""
     try:
-        L = instaloader.Instaloader()
-        post = instaloader.Post.from_shortcode(L.context, url.split("/")[-2])
-        video_url = post.video_url
+        # Download the input file
+        input_file = user_data[chat_id]['input_file']
+        file_content = input_file.download_as_bytearray().decode('utf-8')
         
-        if video_url:
-            response = requests.get(video_url, stream=True)
-            with open("instagram_video.mp4", "wb") as f:
-                for chunk in response.iter_content(chunk_size=1024):
-                    if chunk:
-                        f.write(chunk)
-            
-            await update.message.reply_video(video=open("instagram_video.mp4", "rb"))
-            os.remove("instagram_video.mp4")
-        else:
-            await update.message.reply_text("❌ No video found in this Instagram post.")
+        # Process the content
+        output_content = StringIO()
+        for line in file_content.split('\n'):
+            line = line.strip()
+            if line.startswith("0x"):
+                output_content.write(f'PATCH_LIB("{user_data[chat_id]["lib_name"]}","{line}","{user_data[chat_id]["patch_sequence"]}");\n')
+        
+        # Send the output file
+        output_filename = user_data[chat_id]['output_file']
+        message.reply_document(
+            document=output_content.getvalue().encode('utf-8'),
+            filename=output_filename,
+            caption="Here's your processed file!"
+        )
+        
+        # Clean up
+        del user_data[chat_id]
+        
     except Exception as e:
-        await update.message.reply_text(f"❌ Error: {str(e)}")
+        message.reply_text(f"An error occurred: {str(e)}")
+        if chat_id in user_data:
+            del user_data[chat_id]
+    
+    return -1  # End conversation
 
-async def download_youtube_video(update: Update, url: str):
-    try:
-        yt = YouTube(url)
-        stream = yt.streams.filter(file_extension="mp4", progressive=True).first()
-        if stream:
-            stream.download(filename="youtube_video.mp4")
-            await update.message.reply_video(video=open("youtube_video.mp4", "rb"))
-            os.remove("youtube_video.mp4")
-        else:
-            await update.message.reply_text("❌ No downloadable video found.")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {str(e)}")
+def cancel(update: Update, context: CallbackContext) -> None:
+    """Cancel the current operation."""
+    chat_id = update.effective_chat.id
+    if chat_id in user_data:
+        del user_data[chat_id]
+    
+    update.message.reply_text("Operation cancelled.")
+    return -1  # End conversation
 
-def main():
-    app = Application.builder().token(BOT_TOKEN).build()
+def main() -> None:
+    """Start the bot."""
+    # Replace 'YOUR_BOT_TOKEN' with your actual bot token
+    updater = Updater("7704220520:AAEI_ouYgKUdt52-ec9JJDjdo44pme781Ls", use_context=True)
+    
+    # Get the dispatcher to register handlers
+    dp = updater.dispatcher
+    
+    # Conversation handler for the processing flow
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('process', process_command)],
+        states={
+            "WAITING_INPUT_FILE": [MessageHandler(Filters.document, handle_input_file)],
+            "WAITING_OUTPUT_NAME": [MessageHandler(Filters.text & ~Filters.command, handle_output_name)],
+            "SELECTING_LIBRARY": [CallbackQueryHandler(select_library)],
+            "WAITING_CUSTOM_LIB": [MessageHandler(Filters.text & ~Filters.command, handle_custom_lib)],
+            "SELECTING_PATCH_SEQUENCE": [CallbackQueryHandler(select_patch_sequence)],
+            "WAITING_CUSTOM_SEQ": [MessageHandler(Filters.text & ~Filters.command, handle_custom_seq)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
+    
+    # Register handlers
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(conv_handler)
+    
+    # Start the Bot
+    updater.start_polling()
+    updater.idle()
 
-    # Command handlers
-    app.add_handler(CommandHandler("start", start))
-
-    # Message handler
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    # Start the bot
-    app.run_polling()
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
