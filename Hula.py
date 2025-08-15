@@ -16,7 +16,14 @@ from io import StringIO
 user_data = {}
 
 # Define conversation states
-WAITING_INPUT_FILE, WAITING_OUTPUT_NAME, SELECTING_LIBRARY, WAITING_CUSTOM_LIB, SELECTING_PATCH_SEQUENCE, WAITING_CUSTOM_SEQ = range(6)
+(
+    WAITING_INPUT_FILE,
+    WAITING_OUTPUT_NAME,
+    SELECTING_LIBRARY,
+    WAITING_CUSTOM_LIB,
+    SELECTING_PATCH_SEQUENCE,
+    WAITING_CUSTOM_SEQ,
+) = range(6)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
@@ -189,6 +196,7 @@ def main() -> None:
             WAITING_CUSTOM_SEQ: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_seq)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
+        per_message=True  # Add this to handle callback queries properly
     )
     
     # Register handlers
