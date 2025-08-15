@@ -6,14 +6,17 @@ from telegram.ext import (
     CallbackQueryHandler,
     MessageHandler,
     ContextTypes,
-    ConversationHandler
+    ConversationHandler,
+    filters
 )
-from telegram.ext import filters
 import pyfiglet
 from io import StringIO
 
 # Store user data temporarily
 user_data = {}
+
+# Define conversation states
+WAITING_INPUT_FILE, WAITING_OUTPUT_NAME, SELECTING_LIBRARY, WAITING_CUSTOM_LIB, SELECTING_PATCH_SEQUENCE, WAITING_CUSTOM_SEQ = range(6)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
@@ -28,7 +31,7 @@ async def process_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user_data[chat_id] = {}
     
     await update.message.reply_text("Please send me your input file (text file with memory addresses):")
-    return "WAITING_INPUT_FILE"
+    return WAITING_INPUT_FILE
 
 async def handle_input_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle the input file sent by the user."""
@@ -36,7 +39,7 @@ async def handle_input_file(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     if not update.message.document:
         await update.message.reply_text("Please send a text file as a document.")
-        return "WAITING_INPUT_FILE"
+        return WAITING_INPUT_FILE
     
     # Store file info temporarily
     file = await update.message.document.get_file()
@@ -44,7 +47,7 @@ async def handle_input_file(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     # Ask for output file name
     await update.message.reply_text("Great! Now please enter the name for the output file (e.g., output.txt):")
-    return "WAITING_OUTPUT_NAME"
+    return WAITING_OUTPUT_NAME
 
 async def handle_output_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle the output file name entered by the user."""
@@ -65,18 +68,18 @@ async def handle_output_name(update: Update, context: ContextTypes.DEFAULT_TYPE)
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text('Select the library name:', reply_markup=reply_markup)
-    return "SELECTING_LIBRARY"
+    return SELECTING_LIBRARY
 
 async def select_library(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle library selection."""
     query = update.callback_query
-    chat_id = query.message.chat_id
-    
     await query.answer()
+    
+    chat_id = query.message.chat.id
     
     if query.data == 'custom_lib':
         await query.edit_message_text("Please enter your custom library name (e.g., libcustom.so):")
-        return "WAITING_CUSTOM_LIB"
+        return WAITING_CUSTOM_LIB
     else:
         user_data[chat_id]['lib_name'] = query.data
         # Proceed to patch sequence selection
@@ -103,18 +106,18 @@ async def select_patch_sequence_menu(message) -> int:
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await message.reply_text('Select the patch sequence:', reply_markup=reply_markup)
-    return "SELECTING_PATCH_SEQUENCE"
+    return SELECTING_PATCH_SEQUENCE
 
 async def select_patch_sequence(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle patch sequence selection."""
     query = update.callback_query
-    chat_id = query.message.chat_id
-    
     await query.answer()
+    
+    chat_id = query.message.chat.id
     
     if query.data == 'custom_seq':
         await query.edit_message_text("Please enter your custom patch sequence:")
-        return "WAITING_CUSTOM_SEQ"
+        return WAITING_CUSTOM_SEQ
     else:
         user_data[chat_id]['patch_sequence'] = query.data
         # Proceed to process the file
@@ -178,12 +181,12 @@ def main() -> None:
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('process', process_command)],
         states={
-            "WAITING_INPUT_FILE": [MessageHandler(filters.Document.ALL, handle_input_file)],
-            "WAITING_OUTPUT_NAME": [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_output_name)],
-            "SELECTING_LIBRARY": [CallbackQueryHandler(select_library)],
-            "WAITING_CUSTOM_LIB": [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_lib)],
-            "SELECTING_PATCH_SEQUENCE": [CallbackQueryHandler(select_patch_sequence)],
-            "WAITING_CUSTOM_SEQ": [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_seq)],
+            WAITING_INPUT_FILE: [MessageHandler(filters.Document.TEXT, handle_input_file)],
+            WAITING_OUTPUT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_output_name)],
+            SELECTING_LIBRARY: [CallbackQueryHandler(select_library)],
+            WAITING_CUSTOM_LIB: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_lib)],
+            SELECTING_PATCH_SEQUENCE: [CallbackQueryHandler(select_patch_sequence)],
+            WAITING_CUSTOM_SEQ: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_seq)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
