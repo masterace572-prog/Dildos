@@ -1,9 +1,9 @@
 import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, CallbackContext
+from telegram.ext import filters
 import pyfiglet
 from io import StringIO
-import sys
 
 # Store user data temporarily
 user_data = {}
@@ -174,12 +174,12 @@ def main() -> None:
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('process', process_command)],
         states={
-            "WAITING_INPUT_FILE": [MessageHandler(Filters.document, handle_input_file)],
-            "WAITING_OUTPUT_NAME": [MessageHandler(Filters.text & ~Filters.command, handle_output_name)],
+            "WAITING_INPUT_FILE": [MessageHandler(filters.Document.ALL, handle_input_file)],
+            "WAITING_OUTPUT_NAME": [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_output_name)],
             "SELECTING_LIBRARY": [CallbackQueryHandler(select_library)],
-            "WAITING_CUSTOM_LIB": [MessageHandler(Filters.text & ~Filters.command, handle_custom_lib)],
+            "WAITING_CUSTOM_LIB": [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_lib)],
             "SELECTING_PATCH_SEQUENCE": [CallbackQueryHandler(select_patch_sequence)],
-            "WAITING_CUSTOM_SEQ": [MessageHandler(Filters.text & ~Filters.command, handle_custom_seq)],
+            "WAITING_CUSTOM_SEQ": [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_seq)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
