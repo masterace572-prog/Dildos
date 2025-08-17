@@ -18,7 +18,7 @@ jobs:
           name: Install Python packages
           command: |
             python -m pip install --upgrade pip
-            python -m pip install telebot pymongo aiohttp
+            python -m pip install telebot pymongo aiohttp flask
       - run:
           name: Compile and run
           command: |
