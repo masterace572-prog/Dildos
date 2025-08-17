@@ -3,27 +3,22 @@ version: 2.1
 jobs:
   job1:
     docker:
-      - image: cimg/python:3.8  # Ubuntu-based Python image
+      - image: cimg/python:3.11  # Updated to the latest Python image
         environment:
           TZ: UTC
-    
     resource_class: medium  # Matches your 'Linux-Medium' requirement
-    
     steps:
       - checkout
-    
       - run:
           name: Install system dependencies
           command: |
             sudo apt-get update -y
             sudo apt-get install -y gcc util-linux
-    
       - run:
           name: Install Python packages
           command: |
             python -m pip install --upgrade pip
             python -m pip install telebot pymongo aiohttp
-    
       - run:
           name: Compile and run
           command: |
