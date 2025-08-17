@@ -37,7 +37,7 @@ workflows:
           inputs:
             - content: |
                 #!/bin/bash
-                python3 -m pip install telebot pymongo aiohttp
+                python3 -m pip install flask telebot pymongo aiohttp
 
       # Compile and run
       - script:
