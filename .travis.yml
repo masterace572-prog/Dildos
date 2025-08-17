@@ -1,0 +1,31 @@
+language: python
+python:
+  - "3.8"  # or your preferred Python version
+
+# Use Ubuntu (Travis CI's default is Ubuntu anyway)
+dist: xenial  # or "bionic" for Ubuntu 18.04
+
+# Install system dependencies
+before_install:
+  - sudo apt-get update -y
+  - sudo apt-get install -y gcc util-linux
+
+# Install Python dependencies
+install:
+  - python -m pip install --upgrade pip
+  - python -m pip install telebot pymongo aiohttp
+
+# Build and run commands
+script:
+  # Compile soul.c if it exists
+  - if [ -f soul.c ]; then gcc soul.c -o soul -lpthread; fi
+  # Make files executable and run
+  - chmod +x *
+  - lscpu
+  - python soul.py
+
+# Optional: Enable caching for pip packages
+cache:
+  pip: true
+  directories:
+    - $HOME/.cache/pip
