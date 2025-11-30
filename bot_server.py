@@ -11,7 +11,7 @@ import asyncio
 from threading import Thread
 
 # Configuration
-BOT_TOKEN = os.getenv('BOT_TOKEN', '7704220520:AAEI_ouYgKUdt52-ec9JJDjdo44pme781Ls)
+BOT_TOKEN = os.getenv('BOT_TOKEN', '7704220520:AAEI_ouYgKUdt52-ec9JJDjdo44pme781Ls')
 AUTHORIZED_USERS = [7022875343]  # Replace with your user ID
 
 app = Flask(__name__)
