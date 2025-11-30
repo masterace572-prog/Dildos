@@ -21,41 +21,39 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install python-telegram-bot requests pyngrok
+        pip install python-telegram-bot flask requests
         sudo apt-get update
-        sudo apt-get install -y gcc
+        sudo apt-get install -y gcc wget
 
     - name: Compile UDP tool
       run: |
         gcc -o udp_flood udp_flood.c -lpthread -D_GNU_SOURCE -O3
         ls -la udp_flood
 
-    - name: Setup Ngrok
+    - name: Download and setup ngrok
       run: |
-        curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
-        echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
-        sudo apt update && sudo apt install ngrok
+        wget -q https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
+        tar -xzf ngrok-v3-stable-linux-amd64.tgz
+        chmod +x ngrok
 
     - name: Start Bot with Ngrok
       env:
         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         NGROK_AUTH: ${{ secrets.NGROK_AUTH }}
       run: |
-        # Set up ngrok auth
-        ngrok config add-authtoken $NGROK_AUTH
+        # Authenticate ngrok
+        ./ngrok authtoken $NGROK_AUTH
         
         # Start ngrok tunnel in background
-        ngrok http 8080 --log=stdout > ngrok.log 2>&1 &
+        ./ngrok http 8080 > ngrok.log 2>&1 &
         
         # Wait for ngrok to start
-        sleep 10
+        sleep 5
         
-        # Get public URL
-        NGROK_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url')
-        echo "Public URL: $NGROK_URL"
+        # Get public URL from ngrok API
+        curl -s http://localhost:4040/api/tunnels > tunnels.json
+        echo "Ngrok tunnels:"
+        cat tunnels.json
         
-        # Start the bot
-        python bot_server.py &
-        
-        # Keep the workflow running
-        sleep 3600
+        # Start the bot server
+        python bot_server.py
