@@ -9,7 +9,7 @@ from flask import Flask, request, jsonify
 
 # Configuration
 BOT_TOKEN = os.getenv('BOT_TOKEN', '7704220520:AAEI_ouYgKUdt52-ec9JJDjdo44pme781Ls')
-AUTHORIZED_USERS = [123456789]  # Replace with your user ID
+AUTHORIZED_USERS = [7022875343]  # Replace with your user ID
 
 app = Flask(__name__)
 
